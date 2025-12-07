@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, Routes } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { joinVoiceChannel } = require('@discordjs/voice');
-require('./server'); // render
+require('./server');
 
 const client = new Client({
     intents: [
@@ -11,27 +11,25 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.MessageContent
     ],
-    partials: ['CHANNEL'] // cần để nhắn DM
+    partials: ['CHANNEL']
 });
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+const TOKEN = "d18bb381a8bf4389558cffc5ba9cebcbc80f62ab276017a948b786783aa628fc";
+const CLIENT_ID = "1447082879778820116";
 
-let currentVoiceConnection = null;
+const connections = {};
 
-// Slash commands
 const commands = [
     { name: 'afk', description: 'Bot AFK in your voice channel and send DM' },
     { name: 're', description: 'Leave the voice channel bot is in' }
 ];
 
-// Register commands
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 (async () => {
     try {
+        console.log('Registering commands...');
         await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+            Routes.applicationCommands(CLIENT_ID),
             { body: commands }
         );
         console.log('Commands registered ✅');
@@ -47,26 +45,28 @@ client.on('ready', () => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isCommand()) return;
 
+    const guildId = interaction.guildId;
+
     if (interaction.commandName === 'afk') {
         const member = interaction.member;
         const channel = member.voice.channel;
 
         if (!channel) return interaction.reply('You must be in a voice channel first 😅');
 
-        if (currentVoiceConnection) return interaction.reply('Bot is already AFK in another channel 💀');
+        if (connections[guildId]) return interaction.reply('Bot is already AFK in this server 💀');
 
         const connection = joinVoiceChannel({
             channelId: channel.id,
-            guildId: interaction.guildId,
+            guildId: guildId,
             adapterCreator: interaction.guild.voiceAdapterCreator,
             selfDeaf: true,
             selfMute: true
         });
 
-        currentVoiceConnection = connection;
+        connections[guildId] = connection;
+
         await interaction.reply(`Bot is AFK in channel: ${channel.name} 💤`);
 
-        // Send DM to user
         try {
             await member.send('Thanks for using "susbot" 🎉');
         } catch (err) {
@@ -75,10 +75,10 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 're') {
-        if (!currentVoiceConnection) return interaction.reply('Bot is not in any channel 😅');
+        if (!connections[guildId]) return interaction.reply('Bot is not in any channel 😅');
 
-        currentVoiceConnection.destroy();
-        currentVoiceConnection = null;
+        connections[guildId].destroy();
+        delete connections[guildId];
         await interaction.reply('Bot has left the channel ✅');
     }
 });
